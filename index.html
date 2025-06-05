@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt Engineering Wizard</title>
+    <!--
+        🌐 Project: Prompt Engineering Interactive Wizard
+
+        🎯 Goal:
+        A visually rich, animated, and interactive single-page web experience
+        that functions entirely in a modern web browser with no runtime
+        dependencies other than HTML, CSS, and JavaScript. The experience
+        is modular, maintainable, responsive, and designed for exceptional
+        performance, usability, and visual engagement.
+
+        📖 Usage:
+        Open this HTML file in any modern web browser (Chrome, Safari, Firefox, Edge).
+        Navigate through the wizard steps using the "Previous" and "Next" buttons.
+        The content explains key concepts of prompt engineering.
+        The test suite results are displayed at the bottom of the page.
+
+        🏗️ Structure:
+        - Single HTML file (index.html)
+        - Inline CSS within <style> tags.
+        - Inline JavaScript within <script> tags.
+        - Core application logic is in an IIFE (PromptWizardApp).
+        - Test suite logic is in a <script type="module" id="test-suite">.
+        - Content for wizard steps is stored in a JavaScript array.
+
+        💡 Key Features Implemented:
+        - Single-file deployment.
+        - Browser-only runtime (HTML, CSS, Vanilla JS ES6+).
+        - Responsive design (Flexbox, Grid, Media Queries).
+        - Performant CSS animations for step transitions.
+        - Modular JavaScript structure (IIFE for main app, module for tests).
+        - Accessibility considerations (semantic HTML, ARIA hints).
+        - Embedded test suite with console-like output.
+
+        ⚙️ Technical Highlights:
+        - No external libraries or frameworks.
+        - Animations primarily use `opacity` and `transform` for performance.
+        - BEM-like CSS naming convention for style scoping.
+        - Graceful degradation (e.g., button states).
+        - Debounced window resize listener for potential future complex layouts.
+
+        ⚠️ Known Limitations:
+        - SVGs and other media are not heavily used in this version for simplicity,
+          but the structure allows for their inline inclusion. One example SVG is included.
+        - Advanced analytics/monitoring (FPS counter) is omitted for brevity but
+          could be added to a `Diagnostics` module.
+        - Test suite is basic and focuses on core wizard functionality. More comprehensive
+          UI interaction tests would require more complex setup.
+        - Base64 asset embedding is demonstrated by concept (inline SVG) but not heavily used
+          as this version is text-focused.
+        - For very large numbers of steps, dynamically adding/removing step DOM elements
+          would be more performant than creating all upfront. This version creates them on demand.
+    -->
+
+    <style>
+        /* 1. Reset & Base Styles */
+        :root {
+            --primary-color: #4285F4; /* Google Blue */
+            --secondary-color: #34A853; /* Google Green */
+            --accent-color: #FBBC05; /* Google Yellow */
+            --text-color: #3c4043;
+            --bg-color: #f8f9fa;
+            --surface-color: #ffffff;
+            --border-color: #dadce0;
+            --font-family: 'Roboto', 'Segoe UI', Arial, sans-serif;
+            --animation-duration: 0.3s; /* Slightly faster for snappier feel */
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            font-size: 100%;
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: var(--font-family);
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+
+        /* 2. Wizard Container & Layout */
+        .wizard-container {
+            background-color: var(--surface-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 800px;
+            margin-bottom: 2rem;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .wizard-header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .wizard-header__title {
+            font-size: clamp(1.5rem, 5vw, 2.25rem);
+            margin-bottom: 0.75rem;
+            font-weight: 500;
+        }
+
+        .wizard-progress {
+            background-color: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            height: 10px;
+            overflow: hidden;
+        }
+
+        .wizard-progress__bar {
+            background-color: var(--accent-color);
+            height: 100%;
+            width: 0%;
+            transition: width var(--animation-duration) ease-in-out;
+            border-radius: 4px;
+        }
+
+        /* 3. Wizard Steps Area */
+        .wizard-steps {
+            padding: 1.5rem 2rem;
+            min-height: 320px; /* Adjusted for content */
+            position: relative;
+            overflow: hidden; /* Clip animations */
+        }
+
+        .wizard-step {
+            opacity: 0;
+            position: absolute;
+            top: 1.5rem;
+            left: 2rem;
+            right: 2rem;
+            visibility: hidden;
+            transform: translateX(30px); /* Start further out for entry */
+            transition: opacity var(--animation-duration) ease-in-out,
+                        transform var(--animation-duration) ease-in-out,
+                        visibility 0s var(--animation-duration);
+        }
+
+        .wizard-step--active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(0);
+            position: relative; /* Takes space */
+            top: 0; left: 0; right: 0;
+            transition-delay: 0s, 0s, 0s;
+        }
+
+        .wizard-step--exiting-next { /* Exiting to make way for next step */
+            opacity: 0;
+            transform: translateX(-30px);
+        }
+        .wizard-step--exiting-prev { /* Exiting to make way for prev step */
+            opacity: 0;
+            transform: translateX(30px);
+        }
+
+
+        .wizard-step__title {
+            font-size: clamp(1.25rem, 4vw, 1.75rem);
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            font-weight: 500;
+        }
+
+        .wizard-step__content p,
+        .wizard-step__content ul,
+        .wizard-step__content div {
+            margin-bottom: 0.75rem;
+        }
+        .wizard-step__content ul {
+            list-style-position: outside;
+            padding-left: 1.5rem; /* Indent list items */
+        }
+        .wizard-step__content li {
+            margin-bottom: 0.35rem;
+        }
+        .wizard-step__content code {
+            background-color: #e8eaed;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+            font-size: 0.9em;
+        }
+        .wizard-step__content strong {
+            /* color: var(--secondary-color); */ /* Using default text color for strong, can be customized */
+            font-weight: 600;
+        }
+        .wizard-step__content .example {
+            background-color: #f1f3f4;
+            border-left: 4px solid var(--secondary-color);
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 0 4px 4px 0;
+        }
+        .wizard-step__content .example strong {
+            color: var(--primary-color);
+        }
+
+
+        /* 4. Wizard Navigation */
+        .wizard-navigation {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 2rem;
+            border-top: 1px solid var(--border-color);
+            background-color: #fdfdfd;
+        }
+
+        .wizard-button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            min-width: 120px; /* Ensure buttons have some base width */
+            justify-content: center;
+        }
+        .wizard-button:hover:not(:disabled) {
+            background-color: #3367D6;
+        }
+        .wizard-button:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+        .wizard-button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .wizard-button__icon {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+        .wizard-button--prev .wizard-button__icon { order: -1; } /* Icon before text */
+
+
+        .wizard-step-indicator {
+            font-size: 0.9rem;
+            color: var(--text-color);
+        }
+
+        /* 5. Test Suite Output */
+        .test-output {
+            width: 100%;
+            max-width: 800px;
+            margin-top: 1rem;
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+            font-size: 0.85rem;
+        }
+        .test-output__title {
+            font-size: 1.2rem;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+            font-family: var(--font-family);
+        }
+        .test-output__pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: #202124;
+            color: #e8eaed;
+            padding: 0.75rem;
+            border-radius: 4px;
+        }
+        .test-output__pre .pass { color: #81c995; }
+        .test-output__pre .fail { color: #f28b82; font-weight: bold; }
+        .test-output__pre .info { color: #8ab4f8; }
+        .test-output__pre .suite { color: var(--accent-color); font-weight: bold; margin-top: 0.5em; display: block; }
+
+
+        /* 6. Accessibility */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+
+        .wizard-button:focus-visible {
+            outline: 3px solid var(--accent-color);
+            outline-offset: 2px;
+            box-shadow: 0 0 0 3px var(--primary-color-light); /* Example focus ring */
+        }
+
+
+        /* 7. Responsive Design */
+        @media (max-width: 600px) {
+            body {
+                padding: 0.5rem;
+            }
+            .wizard-header {
+                padding: 1rem;
+            }
+            .wizard-steps {
+                padding: 1rem 1.25rem;
+                min-height: 280px;
+            }
+            .wizard-step {
+                 top: 1rem; left: 1.25rem; right: 1.25rem;
+            }
+            .wizard-navigation {
+                padding: 0.75rem 1.25rem;
+                flex-direction: column; /* Stack buttons, indicator in middle */
+            }
+            .wizard-button {
+                width: 100%;
+            }
+            .wizard-step-indicator {
+                margin: 0.75rem 0; /* Space between buttons */
+                order: -1; /* Move indicator to top on mobile */
+            }
+            .wizard-button--prev { order: 0; } /* Prev below indicator */
+            .wizard-button--next { order: 1; } /* Next at bottom */
+
+            .test-output {
+                font-size: 0.8rem;
+            }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="wizard-container" role="application" aria-roledescription="interactive wizard">
+        <header class="wizard-header">
+            <h1 class="wizard-header__title">Prompt Engineering Guide</h1>
+            <div class="wizard-progress" aria-label="Wizard progress">
+                <div class="wizard-progress__bar" id="progressBar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+        </header>
+
+        <main class="wizard-steps" id="wizardStepsContainer" aria-live="polite" aria-atomic="false">
+            <!-- Wizard step content will be dynamically inserted here -->
+        </main>
+
+        <nav class="wizard-navigation" aria-label="Wizard steps navigation">
+            <button id="prevBtn" class="wizard-button wizard-button--prev" aria-label="Previous step">
+                <svg class="wizard-button__icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+                Previous
+            </button>
+            <span id="stepIndicator" class="wizard-step-indicator" aria-hidden="true">Step 1 / N</span>
+            <button id="nextBtn" class="wizard-button wizard-button--next" aria-label="Next step">
+                Next
+                <svg class="wizard-button__icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+            </button>
+        </nav>
+    </div>
+
+    <div class="test-output">
+        <h2 class="test-output__title">Test Suite Results</h2>
+        <pre id="testResultsPre" class="test-output__pre" aria-live="assertive"></pre>
+    </div>
+
+<script>
+// MAIN APPLICATION LOGIC (PROMPT WIZARD APP)
+const PromptWizardApp = (() => {
+    // --- Configuration & State ---
+    let currentStepIndex = 0;
+    let activeStepElement = null;
+
+    const WIZARD_STEPS_DATA = [
+        {
+            title: "What is a Prompt?",
+            content: `
+                <p>A <strong>prompt</strong> is the text input you provide to a large language model (LLM) to get it to perform a task or generate a response.</p>
+                <p>Think of it as giving instructions or asking a question. The quality of the prompt significantly influences the quality of the LLM's output.</p>
+                <div class="example">
+                    <p><strong>Simple Prompt:</strong> "Write a poem about the ocean."</p>
+                    <p>This tells the LLM the desired format (poem) and topic (ocean).</p>
+                </div>
+                <p>Prompts can range from simple questions to complex instructions with context, examples, and constraints.</p>
+            `
+        },
+        {
+            title: "How Do Prompts Work?",
+            content: `
+                <p>LLMs are trained on vast amounts of text data. They learn patterns, relationships, and structures within that data.</p>
+                <p>When you provide a prompt, the LLM uses its learned knowledge to predict the most likely sequence of text that should follow your input. It's essentially a highly sophisticated text completion engine.</p>
+                <p>The prompt guides this prediction process, steering the model towards the desired output.</p>
+            `
+        },
+        {
+            title: "Types of Prompts: Zero-Shot",
+            content: `
+                <p><strong>Zero-shot prompting</strong> is when you ask the LLM to perform a task without providing any examples of how to do it. The model relies solely on its pre-existing knowledge.</p>
+                <div class="example">
+                    <p><strong>Prompt:</strong> "Classify this text as positive, negative, or neutral: 'I love this new phone, it's amazing!'"</p>
+                    <p>The LLM is expected to understand "classify" and sentiment analysis from its training.</p>
+                </div>
+                <p>Zero-shot works well for tasks the model has likely seen during training or that are straightforward.</p>
+            `
+        },
+        {
+            title: "Types of Prompts: Few-Shot",
+            content: `
+                <p><strong>Few-shot prompting</strong> involves giving the LLM a few examples (shots) of the task you want it to perform. This helps the model understand the desired format, style, or specific requirements.</p>
+                <div class="example">
+                    <p><strong>Prompt:</strong></p>
+                    <p>Translate English to French:</p>
+                    <p>sea otter => loutre de mer</p>
+                    <p>peppermint => menthe poivrée</p>
+                    <p>cheese => ?</p>
+                    <p>By providing examples, the LLM learns the pattern and can correctly output "fromage".</p>
+                </div>
+                <p>Few-shot is very effective for tasks that require a specific output structure or for more nuanced tasks.</p>
+            `
+        },
+        {
+            title: "Elements: Instruction",
+            content: `
+                <p>A clear <strong>instruction</strong> tells the LLM what task to perform.</p>
+                <ul>
+                    <li>Be specific: Instead of "Write about dogs," try "Write a short, funny story about a mischievous corgi."</li>
+                    <li>Use action verbs: "Summarize," "Translate," "Explain," "Generate," "Classify."</li>
+                </ul>
+                <div class="example">
+                    <p><strong>Instruction:</strong> <code>Summarize the following text into three bullet points, focusing on the main challenges.</code></p>
+                </div>
+            `
+        },
+        {
+            title: "Elements: Context",
+            content: `
+                <p>Providing <strong>context</strong> gives the LLM background information to produce a more relevant and accurate response. Context can be external information or information the model should consider.</p>
+                <div class="example">
+                    <p><strong>Prompt with Context:</strong></p>
+                    <p>"<code>Context: The user is a beginner programmer learning Python.</code>"</p>
+                    <p>"<code>Instruction: Explain the concept of a 'for loop' in simple terms.</code>"</p>
+                    <p>The context helps tailor the explanation to the user's level.</p>
+                </div>
+                <p>Think about what the model needs to know to do the job well.</p>
+            `
+        },
+        {
+            title: "Elements: Input Data",
+            content: `
+                <p><strong>Input data</strong> is the specific information you want the LLM to process or work with. This is the "question" or the "item" the instruction acts upon.</p>
+                <div class="example">
+                    <p><strong>Prompt with Input Data:</strong></p>
+                    <p>"<code>Instruction: Translate the following sentence to Spanish.</code>"</p>
+                    <p>"<code>Input Data: 'Hello, how are you today?'</code>"</p>
+                </div>
+                <p>Clearly separate your instruction from the input data, often using labels or delimiters like <code>###</code> or <code><<TEXT>></code>.</p>
+            `
+        },
+        {
+            title: "Elements: Output Indicator",
+            content: `
+                <p>An <strong>output indicator</strong> specifies the desired format or structure of the LLM's response. This helps guide the model to generate output in a way that's easy for you to use or understand.</p>
+                <ul>
+                    <li>Examples: "Format the output as a JSON object.", "Provide the answer as a numbered list.", "Answer in one sentence."</li>
+                    <li>For few-shot, the format of your examples implicitly acts as an output indicator.</li>
+                </ul>
+                <div class="example">
+                    <p><strong>Prompt with Output Indicator:</strong></p>
+                    <p>"<code>Instruction: Extract the key entities (people, organizations, locations) from the text below.</code>"</p>
+                    <p>"<code>Input Data: [Some long text article...]</code>"</p>
+                    <p>"<code>Output Format: JSON object with keys 'people', 'organizations', 'locations'.</code>"</p>
+                </div>
+            `
+        },
+        {
+            title: "Best Practice: Be Clear & Specific",
+            content: `
+                <p>Vague prompts lead to vague or unexpected results. The more specific your instructions, the better the LLM can understand your intent.</p>
+                <ul>
+                    <li>Avoid ambiguity. Define terms if necessary.</li>
+                    <li>Specify constraints: length, style, tone, format.</li>
+                </ul>
+                <div class="example">
+                    <p><strong>Vague:</strong> "Tell me about climate change."</p>
+                    <p><strong>Specific:</strong> "Explain the primary causes of human-induced climate change in three paragraphs, suitable for a high school student."</p>
+                </div>
+            `
+        },
+        {
+            title: "Best Practice: Give the Model a Persona",
+            content: `
+                <p>Instructing the LLM to adopt a specific persona can significantly shape the tone, style, and content of its response.</p>
+                <div class="example">
+                    <p><strong>Prompt with Persona:</strong></p>
+                    <p>"<code>You are a friendly and helpful AI assistant specializing in cooking.</code>"</p>
+                    <p>"<code>Instruction: Provide a simple recipe for chocolate chip cookies, including tips for beginners.</code>"</p>
+                    <p>This can lead to a more engaging and contextually appropriate answer.</p>
+                </div>
+                <p>Other personas: "Act as a Shakespearean poet," "Respond as a cynical historian," "You are a technical writer."</p>
+            `
+        },
+        {
+            title: "Best Practice: Iterate & Refine",
+            content: `
+                <p>Prompt engineering is often an iterative process. Your first prompt might not yield the perfect result.</p>
+                <ul>
+                    <li>Analyze the output: What went wrong? What was good?</li>
+                    <li>Modify your prompt: Add more context, clarify instructions, provide better examples, or adjust output indicators.</li>
+                    <li>Test different phrasings or structures. Small changes can have a big impact.</li>
+                </ul>
+                <p>Keep experimenting until you consistently get the desired output. This iterative loop is key to mastering prompt engineering.</p>
+            `
+        },
+        {
+            title: "Wizard Complete!",
+            content: `
+                <p>Congratulations! You've reached the end of the Prompt Engineering Guide.</p>
+                <p>Key takeaways:</p>
+                <ul>
+                    <li>Prompts are instructions for LLMs.</li>
+                    <li>Clear, specific, and well-structured prompts yield better results.</li>
+                    <li>Zero-shot and few-shot are common prompting techniques.</li>
+                    <li>Elements like instruction, context, input data, and output indicators are crucial.</li>
+                    <li>Best practices include clarity, using personas, and iterating on your prompts.</li>
+                </ul>
+                <p>You can now use the "Previous" button to review steps or explore the test results below.</p>
+            `
+        }
+    ];
+
+    // --- DOM Elements ---
+    const DOM = {
+        stepsContainer: null,
+        prevBtn: null,
+        nextBtn: null,
+        stepIndicator: null,
+        progressBar: null
+    };
+
+    // --- Helper Functions ---
+    function debounce(func, delay) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), delay);
+        };
+    }
+
+    // --- Core Logic ---
+    function renderStep(index, direction = 'next') {
+        if (index < 0 || index >= WIZARD_STEPS_DATA.length) return;
+
+        const stepData = WIZARD_STEPS_DATA[index];
+        const newStepEl = document.createElement('div');
+        newStepEl.classList.add('wizard-step');
+        newStepEl.setAttribute('role', 'tabpanel');
+        newStepEl.setAttribute('id', `step-${index}`);
+        newStepEl.innerHTML = `
+            <h2 class="wizard-step__title">${stepData.title}</h2>
+            <div class="wizard-step__content">${stepData.content}</div>
+        `;
+
+        if (activeStepElement) {
+            // Determine animation direction for exiting step
+            activeStepElement.classList.remove('wizard-step--active');
+            if (direction === 'next') {
+                activeStepElement.classList.add('wizard-step--exiting-next');
+            } else {
+                activeStepElement.classList.add('wizard-step--exiting-prev');
+            }
+            // Remove old step after animation
+            activeStepElement.addEventListener('transitionend', () => {
+                if (activeStepElement && activeStepElement.parentNode === DOM.stepsContainer) { // Check if it's still in DOM and the one we intended
+                     // Check if it's not the current activeStepElement (which would be the new one)
+                    if (!activeStepElement.classList.contains('wizard-step--active')) {
+                        DOM.stepsContainer.removeChild(activeStepElement);
+                    }
+                }
+            }, { once: true });
+        }
+
+        DOM.stepsContainer.appendChild(newStepEl);
+
+        // Force reflow to ensure animation plays on new element
+        // void newStepEl.offsetWidth; // This is a common trick, but requestAnimationFrame is safer
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => { // Double rAF for some browser quirks with new elements
+                newStepEl.classList.add('wizard-step--active');
+            });
+        });
+        
+        activeStepElement = newStepEl;
+        currentStepIndex = index;
+        updateNavigation();
+    }
+
+    function updateNavigation() {
+        DOM.prevBtn.disabled = currentStepIndex === 0;
+        DOM.nextBtn.disabled = currentStepIndex === WIZARD_STEPS_DATA.length - 1;
+
+        DOM.stepIndicator.textContent = `Step ${currentStepIndex + 1} / ${WIZARD_STEPS_DATA.length}`;
+        
+        const progressPercentage = ((currentStepIndex + 1) / WIZARD_STEPS_DATA.length) * 100;
+        DOM.progressBar.style.width = `${progressPercentage}%`;
+        DOM.progressBar.setAttribute('aria-valuenow', Math.round(progressPercentage));
+
+        // Update ARIA for buttons
+        DOM.prevBtn.setAttribute('aria-disabled', DOM.prevBtn.disabled.toString());
+        DOM.nextBtn.setAttribute('aria-disabled', DOM.nextBtn.disabled.toString());
+
+        // Focus management (optional, but good for accessibility)
+        // if (document.activeElement === DOM.prevBtn || document.activeElement === DOM.nextBtn) {
+        //    // Potentially refocus the new active button if the old one became disabled
+        // }
+    }
+
+    function nextStep() {
+        if (currentStepIndex < WIZARD_STEPS_DATA.length - 1) {
+            renderStep(currentStepIndex + 1, 'next');
+        }
+    }
+
+    function prevStep() {
+        if (currentStepIndex > 0) {
+            renderStep(currentStepIndex - 1, 'prev');
+        }
+    }
+
+    // --- Initialization ---
+    function init() {
+        // Cache DOM elements
+        DOM.stepsContainer = document.getElementById('wizardStepsContainer');
+        DOM.prevBtn = document.getElementById('prevBtn');
+        DOM.nextBtn = document.getElementById('nextBtn');
+        DOM.stepIndicator = document.getElementById('stepIndicator');
+        DOM.progressBar = document.getElementById('progressBar');
+
+        if (!DOM.stepsContainer || !DOM.prevBtn || !DOM.nextBtn || !DOM.stepIndicator || !DOM.progressBar) {
+            console.error("Wizard initialization failed: One or more critical DOM elements not found.");
+            if (document.getElementById('testResultsPre')) {
+                document.getElementById('testResultsPre').innerHTML += '<span class="fail">[APP ERROR] Critical DOM elements missing. Wizard cannot start.</span>\n';
+            }
+            return; // Stop initialization
+        }
+
+        // Event Listeners
+        DOM.prevBtn.addEventListener('click', prevStep);
+        DOM.nextBtn.addEventListener('click', nextStep);
+
+        // Keyboard navigation for buttons (Enter/Space) is usually handled by browser
+        // Add arrow key navigation for the whole wizard
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; // Don't interfere with form inputs
+
+            if (e.key === 'ArrowRight') {
+                if (!DOM.nextBtn.disabled) nextStep();
+            } else if (e.key === 'ArrowLeft') {
+                if (!DOM.prevBtn.disabled) prevStep();
+            }
+        });
+
+        // Optional: Handle resize for complex responsive adjustments (not strictly needed here)
+        // window.addEventListener('resize', debounce(() => {
+        //     console.log('Window resized');
+        // }, 250));
+
+        // Render initial step
+        renderStep(0);
+        updateNavigation(); // Initial state
+    }
+
+    // Public API (if needed, e.g., for tests or external control)
+    return {
+        init,
+        getCurrentStepIndex: () => currentStepIndex,
+        getTotalSteps: () => WIZARD_STEPS_DATA.length,
+        // Expose more for testing if necessary
+        _elements: DOM, // For test inspection
+        _stepsData: WIZARD_STEPS_DATA, // For test inspection
+        _nextStep: nextStep, // For programmatic testing
+        _prevStep: prevStep, // For programmatic testing
+        _renderStep: renderStep // For programmatic testing
+    };
+})();
+
+// Initialize the wizard app when the DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', PromptWizardApp.init);
+} else {
+    PromptWizardApp.init();
+}
+</script>
+
+<script type="module" id="test-suite">
+    const testResultsPre = document.getElementById('testResultsPre');
+    let testsRun = 0;
+    let testsPassed = 0;
+    let testsFailed = 0;
+
+    function log(message, type = 'info') {
+        const span = document.createElement('span');
+        span.className = type;
+        span.textContent = message + '\n';
+        testResultsPre.appendChild(span);
+        if (type === 'fail') console.error(message);
+        else if (type === 'pass') console.log(message);
+    }
+
+    function assert(condition, message) {
+        testsRun++;
+        if (condition) {
+            log(`✅ PASS: ${message}`, 'pass');
+            testsPassed++;
+        } else {
+            log(`❌ FAIL: ${message}`, 'fail');
+            testsFailed++;
+        }
+        return condition;
+    }
+
+    function assertEquals(actual, expected, message) {
+        testsRun++;
+        if (actual === expected) {
+            log(`✅ PASS: ${message} (Expected: ${expected}, Got: ${actual})`, 'pass');
+            testsPassed++;
+        } else {
+            log(`❌ FAIL: ${message} (Expected: ${expected}, Got: ${actual})`, 'fail');
+            testsFailed++;
+        }
+    }
+
+    function assertExists(selector, message) {
+        testsRun++;
+        const element = document.querySelector(selector);
+        if (element) {
+            log(`✅ PASS: ${message} (Element ${selector} found)`, 'pass');
+            testsPassed++;
+        } else {
+            log(`❌ FAIL: ${message} (Element ${selector} not found)`, 'fail');
+            testsFailed++;
+        }
+        return element;
+    }
+
+    // --- Test Suites ---
+    async function runTests() {
+        log('🚀 Starting Test Suite...\n', 'info');
+
+        // Wait for app to potentially initialize if DOMContentLoaded was used
+        await new Promise(resolve => setTimeout(resolve, 100)); 
+        
+        // --- Suite: Initialization & DOM ---
+        log('\n--- Suite: Initialization & DOM ---\n', 'suite');
+        assertExists('.wizard-container', 'Wizard container should exist');
+        assertExists('#wizardStepsContainer', 'Wizard steps container should exist');
+        const prevBtn = assertExists('#prevBtn', 'Previous button should exist');
+        const nextBtn = assertExists('#nextBtn', 'Next button should exist');
+        assertExists('#stepIndicator', 'Step indicator should exist');
+        assertExists('#progressBar', 'Progress bar should exist');
+
+        if (!PromptWizardApp || typeof PromptWizardApp.getCurrentStepIndex !== 'function') {
+            log('❌ FAIL: PromptWizardApp is not initialized or essential methods are missing.', 'fail');
+            testsFailed++;
+            logSummary();
+            return; // Stop further tests if app is not usable
+        }
+
+
+        // --- Suite: Wizard Core Functionality ---
+        log('\n--- Suite: Wizard Core Functionality ---\n', 'suite');
+        assertEquals(PromptWizardApp.getCurrentStepIndex(), 0, 'Initial step index should be 0');
+        
+        const totalSteps = PromptWizardApp.getTotalSteps();
+        assert(totalSteps > 0, `Wizard should have at least one step (found ${totalSteps})`);
+
+        if (prevBtn) assert(prevBtn.disabled, 'Previous button should be disabled on first step');
+        if (nextBtn) assert(!nextBtn.disabled, 'Next button should be enabled on first step (if multiple steps)');
+
+        // --- Suite: Navigation ---
+        log('\n--- Suite: Navigation ---\n', 'suite');
+        if (nextBtn && !nextBtn.disabled) {
+            nextBtn.click(); // Simulate click
+            await new Promise(resolve => setTimeout(resolve, 400)); // Wait for animation/update
+            assertEquals(PromptWizardApp.getCurrentStepIndex(), 1, 'Step index should be 1 after one next click');
+            if (prevBtn) assert(!prevBtn.disabled, 'Previous button should be enabled after moving to second step');
+        } else {
+            log('ℹ️ INFO: Skipping next button click test as button is disabled or not found.', 'info');
+        }
+
+        if (prevBtn && !prevBtn.disabled) {
+            prevBtn.click(); // Simulate click
+            await new Promise(resolve => setTimeout(resolve, 400)); // Wait for animation/update
+            assertEquals(PromptWizardApp.getCurrentStepIndex(), 0, 'Step index should be 0 after one prev click');
+            if (prevBtn) assert(prevBtn.disabled, 'Previous button should be disabled again on first step');
+        } else {
+            log('ℹ️ INFO: Skipping prev button click test as button is disabled or not found.', 'info');
+        }
+
+        // Navigate to the last step
+        log('Navigating to last step for boundary check...', 'info');
+        for (let i = 0; i < totalSteps - 1; i++) {
+            if (nextBtn && !nextBtn.disabled) {
+                 // Use internal method for faster testing, or simulate click for full E2E
+                // nextBtn.click();
+                PromptWizardApp._nextStep(); // Faster for testing multiple steps
+                await new Promise(resolve => setTimeout(resolve, 50)); // Shorter delay for internal calls
+            } else {
+                break; 
+            }
+        }
+        await new Promise(resolve => setTimeout(resolve, 400)); // Final animation wait
+        assertEquals(PromptWizardApp.getCurrentStepIndex(), totalSteps - 1, `Should be on the last step (index ${totalSteps - 1})`);
+        if (nextBtn) assert(nextBtn.disabled, 'Next button should be disabled on the last step');
+        if (prevBtn) assert(!prevBtn.disabled, 'Previous button should be enabled on the last step (if not also first)');
+
+
+        // --- Suite: Content Rendering ---
+        log('\n--- Suite: Content Rendering ---\n', 'suite');
+        // Go back to first step for consistent content check
+        PromptWizardApp._renderStep(0); // Use internal method
+        await new Promise(resolve => setTimeout(resolve, 400));
+        const activeStep = document.querySelector('.wizard-step--active');
+        assert(activeStep !== null, 'An active step element should be present');
+        if (activeStep) {
+            const titleElement = activeStep.querySelector('.wizard-step__title');
+            assert(titleElement !== null && titleElement.textContent.trim() !== '', 'Active step should have a non-empty title');
+            assertEquals(titleElement.textContent, PromptWizardApp._stepsData[0].title, 'Active step title matches data');
+        }
+
+        // --- Suite: Feature Detection & Compatibility ---
+        log('\n--- Suite: Feature Detection & Compatibility ---\n', 'suite');
+        assert(typeof window.requestAnimationFrame === 'function', '`requestAnimationFrame` API should be available');
+        assert(typeof document.querySelector === 'function', '`querySelector` API should be available');
+        assert(typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('transform', 'translateX(0)'), 'CSS transforms should be supported');
+        
+        // --- Suite: Accessibility (Basic Checks) ---
+        log('\n--- Suite: Accessibility (Basic Checks) ---\n', 'suite');
+        const wizardContainer = document.querySelector('.wizard-container');
+        if (wizardContainer) assertEquals(wizardContainer.getAttribute('role'), 'application', 'Wizard container should have role="application"');
+        
+        const progressBar = document.getElementById('progressBar');
+        if (progressBar) assertEquals(progressBar.getAttribute('role'), 'progressbar', 'Progress bar should have role="progressbar"');
+        if (prevBtn) assert(prevBtn.hasAttribute('aria-label'), 'Previous button should have an aria-label');
+        if (nextBtn) assert(nextBtn.hasAttribute('aria-label'), 'Next button should have an aria-label');
+
+
+        logSummary();
+    }
+
+    function logSummary() {
+        log('\n--- Test Summary ---', 'suite');
+        log(`Total tests: ${testsRun}`, 'info');
+        log(`Passed: ${testsPassed}`, 'pass');
+        log(`Failed: ${testsFailed}`, testsFailed > 0 ? 'fail' : 'pass');
+        if (testsFailed === 0) {
+            log('🎉 All tests passed!', 'pass');
+        } else {
+            log('💔 Some tests failed. Please review the logs.', 'fail');
+        }
+    }
+
+    // Run tests when the module loads
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', runTests);
+    } else {
+        runTests();
+    }
+
+</script>
+
+</body>
+</html>
